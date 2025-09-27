@@ -45,6 +45,12 @@ type Strategy struct {
 	Params StrategyParams
 }
 
+// Paper captures paper-trading account settings such as starting cash and per-symbol caps.
+type Paper struct {
+	StartingCash         float64 `yaml:"starting_cash"`
+	MaxPositionPerSymbol float64 `yaml:"max_position_per_symbol"`
+}
+
 // Config collects every configuration leaf for easy marshaling from YAML.
 type Config struct {
 	App      App      `yaml:"app"`
@@ -53,6 +59,7 @@ type Config struct {
 	Strategy Strategy `yaml:"strategy"`
 	Dex      Dex      `yaml:"dex"`
 	Wallet   Wallet   `yaml:"wallet"`
+	Paper    Paper    `yaml:"paper"`
 }
 
 // Load reads a YAML file from disk and hydrates a Config struct.

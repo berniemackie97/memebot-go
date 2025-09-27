@@ -5,7 +5,7 @@ app:
   log_level: "info"
 
 exchange:
-  name: "bybit" # stub
+  name: "binance" # provider for realtime market data feed
   symbols: ["BTCUSDT", "ETHUSDT"]
   api_key: ""
   api_secret: ""
@@ -31,3 +31,7 @@ dex:
 
 wallet:
   private_key_base58: "" # kept empty; we load from .env at runtime
+
+paper:
+  starting_cash: 10000
+  max_position_per_symbol: 1.0

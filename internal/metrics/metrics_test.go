@@ -11,19 +11,23 @@ func TestServeRegistersMetrics(t *testing.T) {
 	defer srv.Close()
 
 	TicksTotal.WithLabelValues("BTCUSDT").Inc()
+	OrdersTotal.WithLabelValues("BTCUSDT", "BUY").Inc()
+	PaperEquity.Set(123.45)
+	PaperPositions.WithLabelValues("BTCUSDT").Set(0.5)
 
 	mfs, err := prometheus.DefaultGatherer.Gather()
 	if err != nil {
 		t.Fatalf("failed to gather metrics: %v", err)
 	}
-	found := false
+	found := map[string]bool{}
 	for _, mf := range mfs {
-		if mf.GetName() == "ticks_total" {
-			found = true
-			break
-		}
+		found[mf.GetName()] = true
 	}
-	if !found {
-		t.Fatalf("ticks_total metric not found")
+
+	required := []string{"ticks_total", "orders_total", "paper_equity", "paper_position"}
+	for _, name := range required {
+		if !found[name] {
+			t.Fatalf("expected metric %s", name)
+		}
 	}
 }

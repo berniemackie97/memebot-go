@@ -4,33 +4,43 @@ This document captures the complete current shape of the `memebot-go` trading sy
 
 ## Runtime Binaries
 
-- `cmd/paper`: paper-trading daemon that wires the full pipeline (config → feed → strategy → risk → execution) against simulated data. Designed for development and integration testing.
+- `cmd/paper`: paper-trading daemon that wires the full pipeline (config -> feed -> strategy -> risk -> execution -> virtual account) against **live** market data.
 - `cmd/executor`: placeholder for real-money trading. We intentionally keep it inert until all exchange integrations and safety controls are production-ready.
 - `cmd/dexexec`: Solana/Jupiter swap exerciser. Useful for validating DeFi connectivity and wallet management without touching centralised venues.
 
 ## Configuration Layer
 
-`internal/config` exposes typed structs for application, exchange, risk, strategy, and DEX parameters. The `Load` helper reads YAML and yields a strongly typed `Config`. Configuration fans out to every other module so that behavioural changes remain declarative.
+`internal/config` exposes typed structs for application, exchange, risk, strategy, paper-account, and DEX parameters. The `Load` helper reads YAML and yields a strongly typed `Config`. Configuration fans out to every other module so that behavioural changes remain declarative.
 
 ## Data Ingestion Layer
 
-`internal/exchange.Feed` currently emits synthetic ticks. In production it becomes a websocket or FIX streaming client per venue. The feed pushes `signal.Tick` messages into buffered channels consumed by strategies.
+`internal/exchange` now supports multiple providers. In development/tests we can fall back to the synthetic stub, while production paper runs consume Binance aggregated trades via public websockets with retry/ping handling. The feed pushes `signal.Tick` messages into buffered channels consumed by strategies and also increments Prometheus tick counters.
 
 ## Signal Generation
 
-`internal/strategy.OBIMomentum` listens to ticks and produces directional `signal.Signal` outputs. Today the signal is a stub (score always zero) but the scaffolding is in place for order-book imbalance + momentum logic using the `threshold` and `window` knobs.
+`internal/strategy.OBIMomentum` maintains per-symbol rolling windows of trade data. It computes a simple order-flow imbalance (buy volume vs sell volume) and combines it with price momentum (tanh-normalised change over the window). Weighted scores exceeding the configured threshold emit `signal.Signal` objects for downstream consumers.
 
 ## Risk Management
 
 `internal/risk.Limits` enforces simple notional caps. The paper engine can cheaply reject orders that exceed policy, and we will enrich this package with drawdown monitoring, kill-switch logic, and position awareness.
 
+## Paper Accounting
+
+`internal/paper.Account` maintains simulated cash balances, realised PnL, and per-symbol positions. It enforces starting bankroll, per-symbol caps, and ensures sells only execute against available inventory. Mark-to-market snapshots feed logs and Prometheus gauges so testers can track equity and exposure in real time.
+
 ## Execution
 
-`internal/execution.Executor` is a logging shim that records every order request. The executor will later route to the configured venue (CEX REST/WebSocket APIs or the Solana Jupiter aggregator) while emitting Prometheus metrics.
+`internal/execution.Executor` is a logging shim that records every order request and bumps Prometheus counters. The executor will later route to the configured venue (CEX REST/WebSocket APIs or the Solana Jupiter aggregator) while emitting metrics.
 
 ## Metrics and Observability
 
-`internal/metrics` registers Prometheus counters (`ticks_total`, `orders_total`) and serves them via HTTP. The paper binary starts this server immediately so dashboards always receive data.
+`internal/metrics` registers Prometheus counters and gauges:
+- `ticks_total{symbol}`: live market data ingest rate.
+- `orders_total{symbol,side}`: simulated order flow.
+- `paper_equity`: paper account equity (cash + positions).
+- `paper_position{symbol}`: open size per symbol.
+
+`metrics.Serve` exposes `/metrics` so dashboards can scrape the bot while it runs.
 
 ## Utilities
 
@@ -49,14 +59,15 @@ The `dexexec` binary demonstrates how to wire the client end-to-end.
 
 1. The paper binary loads configuration and bootstraps logging plus Prometheus metrics.
 2. A cancellable context listens for OS signals to guarantee clean shutdown.
-3. The feed streams ticks onto a buffered channel inside a goroutine.
-4. The strategy consumes ticks synchronously, transforms them into trading signals, and emits metadata such as reasoning and timestamps.
+3. The feed streams live Binance ticks (or stub data in tests) onto a buffered channel inside a goroutine.
+4. The strategy consumes ticks synchronously, transforms them into trading signals via imbalance + momentum heuristics, and emits metadata such as reasoning and timestamps.
 5. Risk checks gate the downstream execution path.
-6. Eligible orders are submitted through the executor, which, for now, only logs the intent but forms the seam for production exchanges.
+6. The paper account validates bankroll/position limits, mutates balances on fills, and updates realised/unrealised PnL.
+7. Eligible orders are submitted through the executor, which logs intent and increments metrics.
 
 ## Testing Philosophy
 
-Unit tests cover configuration loading, risk limit checks, logger behaviour, feed streaming, and the Solana client request composition. Integration tests focus on the paper engine wiring (ensuring ticks flow to strategies and produce orders when thresholds are met).
+Unit tests cover configuration loading, risk limit checks, logger behaviour, feed streaming, paper account transitions, and the Solana client request composition. Strategy tests validate that the OBIMomentum heuristic emits long/short signals when data supports it. Integration tests focus on the paper engine wiring (ensuring ticks flow to strategies and produce orders when thresholds are met).
 
 As functionality hardens we will expand these suites with:
 
@@ -66,9 +77,9 @@ As functionality hardens we will expand these suites with:
 
 ## Outstanding Work
 
-- Replace synthetic feed with real exchange data connectors and integrate Prometheus counters at ingestion.
-- Flesh out `OBIMomentum` logic and calibrate thresholds.
-- Implement account/risk state tracking (positions, PnL, drawdown) and enforce global kill switches.
+- Replace heuristic OBIMomentum logic with real order book imbalance processing and calibrated thresholds.
+- Implement account/risk state tracking for drawdown limits and global kill switches.
 - Promote the executor beyond logging: add actual REST/WS adapters plus order reconciliation.
-- Build paper-trading fills model (latency, slippage) and record fills for later analysis.
+- Extend the paper fills engine with order state machines, latency/slippage modelling, and persistence for analytics.
+- Replace hand-rolled Binance client with pluggable connectors per venue (Bybit, OKX, etc.) and add reconnection telemetry.
 - Extend DEX tooling with position swapping, quoting for multiple routes, and failure handling.

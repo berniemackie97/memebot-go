@@ -2,32 +2,72 @@
 
 High-speed, adaptive crypto executor (CEX/DEX-ready). This repo includes:
 - **cmd/executor**: live daemon (connects to exchange, runs strategies)
-- **cmd/paper**: paper-trading daemon (simulated fills)
+- **cmd/paper**: paper-trading daemon (live data + simulated fills)
 - **cmd/dexexec**: Solana Jupiter swap exerciser
-- **internal/**: clean packages for config, data ingest, signals, strategy, risk, execution, metrics
+- **internal/**: clean packages for config, data ingest, signals, strategy, risk, execution, metrics, paper accounting
 
-## Quick start
+## Build
 ```bash
-go run ./cmd/paper      # paper mode with metrics on :9090
-go run ./cmd/executor   # live executor (stub)
+go build ./cmd/paper      # compile paper daemon
+go build ./cmd/executor   # compile (still stubbed)
+go build ./cmd/dexexec    # compile Solana swap exerciser
+```
+
+## Paper Trading Quickstart
+1. Edit `internal/config/config.yaml`:
+   - `exchange.name: "binance"` and set `exchange.symbols` to your spot pairs.
+   - Tune `paper` bankroll (`starting_cash`) and per-symbol cap (`max_position_per_symbol`).
+   - Pick strategy thresholds under `strategy.params`.
+2. Start metrics + paper loop:
+   ```bash
+   go run ./cmd/paper
+   ```
+3. Watch structured logs for fills and account state. Prometheus metrics are exposed at the configured `app.metrics_addr` (default `:9090`).
+4. Inspect key gauges/counters:
+   - `ticks_total{symbol}` – live trade ingest rate.
+   - `orders_total{symbol,side}` – simulated order flow.
+   - `paper_equity` – account equity (cash + mark-to-market positions).
+   - `paper_position{symbol}` – current position size per symbol.
+
+## Run Other Binaries
+```bash
+SOLANA_PRIVATE_KEY_BASE58=... \  # only needed for dexexec
+  go run ./cmd/dexexec
+```
+
+## Test & Format
+```bash
+go fmt ./...          # format all Go code
+go test ./...         # run unit + integration tests
+go test ./... -cover  # inspect coverage by package
 ```
 
 ## Progress
-- ✅ Strongly typed configuration loader with sample YAML
-- ✅ Synthetic exchange feed producing ticks for all configured symbols
-- ✅ OBIMomentum strategy scaffold returning deterministic signals
-- ✅ Risk notional guard-rail and logging executor stub
-- ✅ Prometheus metrics server (`ticks_total`, `orders_total`)
-- ✅ Solana/Jupiter DEX client and environment-driven wallet loader
-- ✅ Unit + integration tests covering every subsystem and the paper flow
+- [x] Strongly typed configuration loader with sample YAML
+- [x] Paper config (starting cash, per-symbol caps) and PnL-aware virtual account ledger
+- [x] Binance live trade feed wired into paper execution loop with retry/resume
+- [x] OBIMomentum strategy combining trade imbalance and momentum to emit live signals
+- [x] Risk notional guard-rail and logging executor stub (with Prometheus counters)
+- [x] Prometheus metrics server (`ticks_total`, `orders_total`, `paper_equity`, `paper_position`)
+- [x] Solana/Jupiter DEX client and environment-driven wallet loader
+- [x] Unit + integration tests covering every subsystem, including paper flow
 
 ### Remaining To Hit "Complete"
-1. Replace synthetic tick feed with real exchange connectivity and enrich metrics.
-2. Flesh out OBIMomentum (true order book imbalance, volatility windows, thresholds).
-3. Expand risk to track exposure, PnL, drawdown, and add global kill switches.
-4. Implement real order routing (REST/WS) in `internal/execution` plus reconciliation.
-5. Build paper-trading fills engine (latency, slippage, fill records) and persistence.
-6. Harden DEX path with dynamic route selection, retries, and failure telemetry.
+1. Replace heuristic strategy logic with production-ready order book imbalance calculations and regression fixtures.
+2. Expand risk to track exposure, PnL, drawdown, and add global kill switches.
+3. Implement real order routing (REST/WebSocket) in `internal/execution` plus reconciliation.
+4. Build richer paper fills engine (latency, slippage, order states) and persistence for analytics.
+5. Harden DEX path with dynamic route selection, retries, and failure telemetry.
+6. Add historical/backtest tooling for strategies alongside live paper validation.
+
+## Configuration Cheatsheet
+`internal/config/config.yaml` drives every binary. Key sections:
+- `app`: process metadata, log level, Prometheus bind address.
+- `exchange`: provider (`binance` today) and target symbols.
+- `strategy`: implementation plus tunable parameters (OBI threshold, volatility window length).
+- `risk`: per-trade notional guard-rails and kill-switch placeholders.
+- `dex`/`wallet`: Solana RPC + Jupiter endpoints and key material (used by `cmd/dexexec`).
+- `paper`: bankroll (`starting_cash`), per-symbol cap, and (soon) extra paper controls.
 
 ## Documentation
-Full subsystem documentation lives in `docs/architecture.md`.
+Full subsystem documentation lives in `docs/architecture.md` with deep dives on binaries, dataflow, and outstanding work.

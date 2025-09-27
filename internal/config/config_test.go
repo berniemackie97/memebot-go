@@ -21,6 +21,12 @@ func TestLoad(t *testing.T) {
 	if cfg.Dex.Commitment != "processed" {
 		t.Fatalf("expected processed commitment, got %s", cfg.Dex.Commitment)
 	}
+	if cfg.Paper.StartingCash != 5000 {
+		t.Fatalf("expected starting cash 5000, got %.2f", cfg.Paper.StartingCash)
+	}
+	if cfg.Paper.MaxPositionPerSymbol != 0.5 {
+		t.Fatalf("expected max position 0.5, got %.2f", cfg.Paper.MaxPositionPerSymbol)
+	}
 }
 
 func TestLoadMissingFile(t *testing.T) {

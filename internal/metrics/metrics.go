@@ -19,10 +19,19 @@ var (
 		prometheus.CounterOpts{Name: "orders_total", Help: "Orders submitted"},
 		[]string{"symbol", "side"},
 	)
+	// PaperEquity gauges current paper trading account equity (cash + mark-to-market positions).
+	PaperEquity = prometheus.NewGauge(
+		prometheus.GaugeOpts{Name: "paper_equity", Help: "Paper trading account equity mark-to-market"},
+	)
+	// PaperPositions reports current paper position sizes per symbol.
+	PaperPositions = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "paper_position", Help: "Paper trading position size"},
+		[]string{"symbol"},
+	)
 )
 
 func init() {
-	prometheus.MustRegister(TicksTotal, OrdersTotal)
+	prometheus.MustRegister(TicksTotal, OrdersTotal, PaperEquity, PaperPositions)
 }
 
 // Serve mounts the Prometheus handler on /metrics and launches the HTTP server in a goroutine.

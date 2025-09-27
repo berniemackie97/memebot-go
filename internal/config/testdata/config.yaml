@@ -31,3 +31,7 @@ dex:
 
 wallet:
   private_key_base58: ""
+
+paper:
+  starting_cash: 5000
+  max_position_per_symbol: 0.5
