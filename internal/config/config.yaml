@@ -1,0 +1,33 @@
+app:
+  name: "memebot-go"
+  env: "dev"
+  metrics_addr: ":9090"
+  log_level: "info"
+
+exchange:
+  name: "bybit"        # stub
+  symbols: ["BTCUSDT","ETHUSDT"]
+  api_key: ""
+  api_secret: ""
+  testnet: true
+
+risk:
+  max_notional_per_trade: 50.0
+  max_daily_loss: 200.0
+  kill_switch_drawdown: 0.08
+
+strategy:
+  mode: "obi_momentum"  # order book imbalance + momentum
+  params:
+    obi_levels: 5
+    obi_threshold: 1.4
+    vol_window_secs: 120
+
+dex:
+  chain: "solana"
+  rpc_url: "https://api.mainnet-beta.solana.com"
+  commitment: "confirmed"
+  jupiter_base: "https://quote-api.jup.ag"
+
+wallet:
+  private_key_base58: ""   # kept empty; we load from .env at runtime
