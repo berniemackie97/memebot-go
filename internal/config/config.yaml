@@ -5,8 +5,8 @@ app:
   log_level: "info"
 
 exchange:
-  name: "bybit"        # stub
-  symbols: ["BTCUSDT","ETHUSDT"]
+  name: "bybit" # stub
+  symbols: ["BTCUSDT", "ETHUSDT"]
   api_key: ""
   api_secret: ""
   testnet: true
@@ -17,7 +17,7 @@ risk:
   kill_switch_drawdown: 0.08
 
 strategy:
-  mode: "obi_momentum"  # order book imbalance + momentum
+  mode: "obi_momentum" # order book imbalance + momentum
   params:
     obi_levels: 5
     obi_threshold: 1.4
@@ -30,4 +30,4 @@ dex:
   jupiter_base: "https://quote-api.jup.ag"
 
 wallet:
-  private_key_base58: ""   # kept empty; we load from .env at runtime
+  private_key_base58: "" # kept empty; we load from .env at runtime

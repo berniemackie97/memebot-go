@@ -35,34 +35,34 @@ type Quote struct {
 }
 
 func NewJupiterClient(rpcURL, base string, owner solana.PrivateKey, commit string) *JupiterClient {
-	c := rpc.CommitmentConfirmed
+	commitment := rpc.CommitmentConfirmed
 	switch commit {
 	case "processed":
-		c = rpc.CommitmentProcessed
+		commitment = rpc.CommitmentProcessed
 	case "finalized":
-		c = rpc.CommitmentFinalized
+		commitment = rpc.CommitmentFinalized
 	}
 	return &JupiterClient{
 		Base:   base,
 		RPC:    rpc.New(rpcURL),
 		Owner:  owner,
-		Commit: c,
+		Commit: commitment,
 		Http:   &http.Client{Timeout: 8 * time.Second},
 	}
 }
 
 // amount is in smallest units (lamports for SOL; token decimals apply).
-func (j *JupiterClient) GetQuote(ctx context.Context, inputMint, outputMint string, amount uint64, slippageBps int) (*Quote, error) {
-	q := url.Values{}
-	q.Set("inputMint", inputMint)
-	q.Set("outputMint", outputMint)
-	q.Set("amount", fmt.Sprintf("%d", amount))
-	q.Set("slippageBps", fmt.Sprintf("%d", slippageBps))
-	q.Set("onlyDirectRoutes", "false")
-	u := j.Base + "/v6/quote?" + q.Encode()
+func (jupiterClient *JupiterClient) GetQuote(ctx context.Context, inputMint, outputMint string, amount uint64, slippageBps int) (*Quote, error) {
+	urlValues := url.Values{}
+	urlValues.Set("inputMint", inputMint)
+	urlValues.Set("outputMint", outputMint)
+	urlValues.Set("amount", fmt.Sprintf("%d", amount))
+	urlValues.Set("slippageBps", fmt.Sprintf("%d", slippageBps))
+	urlValues.Set("onlyDirectRoutes", "false")
+	URL := jupiterClient.Base + "/v6/quote?" + urlValues.Encode()
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
-	resp, err := j.Http.Do(req)
+	req, _ := http.NewRequestWithContext(ctx, "GET", URL, nil)
+	resp, err := jupiterClient.Http.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -70,17 +70,17 @@ func (j *JupiterClient) GetQuote(ctx context.Context, inputMint, outputMint stri
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("jupiter quote status %d", resp.StatusCode)
 	}
-	var out Quote
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	var quote Quote
+	if err := json.NewDecoder(resp.Body).Decode(&quote); err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return &quote, nil
 }
 
 // BuildAndSendSwap asks Jupiter for a ready-to-sign transaction, signs it locally, then submits via RPC.
-func (j *JupiterClient) BuildAndSendSwap(ctx context.Context, quote *Quote) (sig solana.Signature, err error) {
+func (jupiterClient *JupiterClient) BuildAndSendSwap(ctx context.Context, quote *Quote) (sig solana.Signature, err error) {
 	payload := map[string]any{
-		"userPublicKey":             j.Owner.PublicKey().String(),
+		"userPublicKey":             jupiterClient.Owner.PublicKey().String(),
 		"wrapAndUnwrapSol":          true,
 		"asLegacyTransaction":       false,
 		"useTokenLedger":            false,
@@ -89,9 +89,9 @@ func (j *JupiterClient) BuildAndSendSwap(ctx context.Context, quote *Quote) (sig
 	}
 	body, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequestWithContext(ctx, "POST", j.Base+"/v6/swap", bytes.NewReader(body))
+	req, _ := http.NewRequestWithContext(ctx, "POST", jupiterClient.Base+"/v6/swap", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := j.Http.Do(req)
+	resp, err := jupiterClient.Http.Do(req)
 	if err != nil {
 		return sig, err
 	}
@@ -112,15 +112,15 @@ func (j *JupiterClient) BuildAndSendSwap(ctx context.Context, quote *Quote) (sig
 	}
 
 	// Decode the transaction using the binary decoder
-	tx, err := solana.TransactionFromDecoder(bin.NewBinDecoder(raw))
+	transaction, err := solana.TransactionFromDecoder(bin.NewBinDecoder(raw))
 	if err != nil {
 		return sig, fmt.Errorf("unmarshal tx: %w", err)
 	}
 
 	// Sign with our wallet (tx.Sign returns (signatures, error) — ignore the first value)
-	_, err = tx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
-		if key.Equals(j.Owner.PublicKey()) {
-			return &j.Owner
+	_, err = transaction.Sign(func(key solana.PublicKey) *solana.PrivateKey {
+		if key.Equals(jupiterClient.Owner.PublicKey()) {
+			return &jupiterClient.Owner
 		}
 		return nil
 	})
@@ -129,9 +129,9 @@ func (j *JupiterClient) BuildAndSendSwap(ctx context.Context, quote *Quote) (sig
 	}
 
 	// Send the signed transaction
-	sig, err = j.RPC.SendTransactionWithOpts(ctx, tx, rpc.TransactionOpts{
+	sig, err = jupiterClient.RPC.SendTransactionWithOpts(ctx, transaction, rpc.TransactionOpts{
 		SkipPreflight:       false,
-		PreflightCommitment: j.Commit,
+		PreflightCommitment: jupiterClient.Commit,
 	})
 	return sig, err
 }

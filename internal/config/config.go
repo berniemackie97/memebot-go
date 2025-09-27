@@ -45,14 +45,14 @@ type Config struct {
 }
 
 func Load(path string) (*Config, error) {
-	f, err := os.Open(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open config: %w", err)
 	}
-	defer f.Close()
-	var c Config
-	if err := yaml.NewDecoder(f).Decode(&c); err != nil {
+	defer file.Close()
+	var config Config
+	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
 		return nil, fmt.Errorf("decode yaml: %w", err)
 	}
-	return &c, nil
+	return &config, nil
 }
