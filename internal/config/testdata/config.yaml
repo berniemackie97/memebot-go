@@ -1,0 +1,33 @@
+app:
+  name: "memebot-test"
+  env: "test"
+  metrics_addr: ":1234"
+  log_level: "debug"
+
+exchange:
+  name: "stub"
+  symbols: ["BTCUSDT"]
+  api_key: "k"
+  api_secret: "s"
+  testnet: true
+
+risk:
+  max_notional_per_trade: 10
+  max_daily_loss: 50
+  kill_switch_drawdown: 0.1
+
+strategy:
+  mode: "obi_momentum"
+  params:
+    obi_levels: 3
+    obi_threshold: 1.2
+    vol_window_secs: 60
+
+dex:
+  chain: "solana"
+  rpc_url: "https://rpc"
+  commitment: "processed"
+  jupiter_base: "https://jup"
+
+wallet:
+  private_key_base58: ""

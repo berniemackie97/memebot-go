@@ -1,3 +1,4 @@
+// Binary executor is intentionally left as a stub to avoid accidental live trading during scaffolding.
 package main
 
 import (

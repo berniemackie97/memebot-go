@@ -1,3 +1,4 @@
+// Package solana provides Solana-specific exchange connectivity, including Jupiter aggregator access.
 package solana
 
 import (
@@ -15,6 +16,7 @@ import (
 	"github.com/gagliardetto/solana-go/rpc"
 )
 
+// JupiterClient orchestrates quote retrieval and swap submission through Jupiter.
 type JupiterClient struct {
 	Base   string
 	RPC    *rpc.Client
@@ -23,6 +25,7 @@ type JupiterClient struct {
 	Http   *http.Client
 }
 
+// Quote captures the subset of the Jupiter quote response relied on by the executor.
 type Quote struct {
 	InputMint      string  `json:"inputMint"`
 	OutputMint     string  `json:"outputMint"`
@@ -34,6 +37,7 @@ type Quote struct {
 	PriceImpactPct float64 `json:"priceImpactPct"`
 }
 
+// NewJupiterClient hydrates a JupiterClient by wiring an RPC client, signer, and HTTP settings.
 func NewJupiterClient(rpcURL, base string, owner solana.PrivateKey, commit string) *JupiterClient {
 	commitment := rpc.CommitmentConfirmed
 	switch commit {
@@ -51,7 +55,7 @@ func NewJupiterClient(rpcURL, base string, owner solana.PrivateKey, commit strin
 	}
 }
 
-// amount is in smallest units (lamports for SOL; token decimals apply).
+// GetQuote asks the Jupiter REST API for the best route given amount and slippage in basis points.
 func (jupiterClient *JupiterClient) GetQuote(ctx context.Context, inputMint, outputMint string, amount uint64, slippageBps int) (*Quote, error) {
 	urlValues := url.Values{}
 	urlValues.Set("inputMint", inputMint)
@@ -70,6 +74,7 @@ func (jupiterClient *JupiterClient) GetQuote(ctx context.Context, inputMint, out
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("jupiter quote status %d", resp.StatusCode)
 	}
+
 	var quote Quote
 	if err := json.NewDecoder(resp.Body).Decode(&quote); err != nil {
 		return nil, err
@@ -99,6 +104,7 @@ func (jupiterClient *JupiterClient) BuildAndSendSwap(ctx context.Context, quote 
 	if resp.StatusCode != 200 {
 		return sig, fmt.Errorf("jupiter swap status %d", resp.StatusCode)
 	}
+
 	var sr struct {
 		SwapTransaction string `json:"swapTransaction"` // base64-encoded tx (unsigned)
 	}
@@ -111,13 +117,13 @@ func (jupiterClient *JupiterClient) BuildAndSendSwap(ctx context.Context, quote 
 		return sig, fmt.Errorf("decode tx: %w", err)
 	}
 
-	// Decode the transaction using the binary decoder
+	// Decode the transaction using the binary decoder.
 	transaction, err := solana.TransactionFromDecoder(bin.NewBinDecoder(raw))
 	if err != nil {
 		return sig, fmt.Errorf("unmarshal tx: %w", err)
 	}
 
-	// Sign with our wallet (tx.Sign returns (signatures, error) — ignore the first value)
+	// Sign with our wallet (tx.Sign returns (signatures, error) - ignore the first value).
 	_, err = transaction.Sign(func(key solana.PublicKey) *solana.PrivateKey {
 		if key.Equals(jupiterClient.Owner.PublicKey()) {
 			return &jupiterClient.Owner
@@ -128,7 +134,7 @@ func (jupiterClient *JupiterClient) BuildAndSendSwap(ctx context.Context, quote 
 		return sig, fmt.Errorf("sign: %w", err)
 	}
 
-	// Send the signed transaction
+	// Send the signed transaction.
 	sig, err = jupiterClient.RPC.SendTransactionWithOpts(ctx, transaction, rpc.TransactionOpts{
 		SkipPreflight:       false,
 		PreflightCommitment: jupiterClient.Commit,

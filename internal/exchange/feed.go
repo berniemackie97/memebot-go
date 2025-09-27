@@ -1,3 +1,4 @@
+// Package exchange hosts connectors for centralized venues and tick sources.
 package exchange
 
 import (
@@ -7,16 +8,19 @@ import (
 	"memebot-go/internal/signal"
 )
 
-// Feed is a stub tick stream; replace with real WS client per exchange
+// Feed represents a pluggable market data stream implementation.
 type Feed struct {
 	Symbols []string
 }
 
+// NewFeed constructs a stub feed emitting synthetic prices for the configured symbols.
 func NewFeed(symbols []string) *Feed { return &Feed{Symbols: symbols} }
 
+// Run pushes ticks onto the provided channel until the context is canceled.
 func (f *Feed) Run(ctx context.Context, out chan<- signal.Tick) error {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
+
 	var px float64 = 100.0
 	for {
 		select {

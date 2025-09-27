@@ -1,3 +1,4 @@
+// Binary paper spins up a simulated trading loop with fake data and risk checks.
 package main
 
 import (
@@ -18,23 +19,28 @@ import (
 )
 
 func main() {
+	// Logger initialization happens first to give us instrumentation for downstream failures.
 	log := util.NewLogger("info")
 
+	// Load strongly-typed configuration from YAML so we can wire all subsystems.
 	cfg, err := config.Load("internal/config/config.yaml")
 	if err != nil {
 		log.Fatal().Err(err).Msg("load config")
 	}
 
+	// Launch Prometheus metrics early to watch the bot before it starts trading.
 	_ = metrics.Serve(cfg.App.MetricsAddr)
 	log.Info().Str("addr", cfg.App.MetricsAddr).Msg("metrics up")
 
+	// Use signal-aware context so Ctrl+C and termination signals shut everything down cleanly.
 	ctx, cancel := ossignal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-
 	defer cancel()
 
+	// Wire the market data feed and channel fanout the strategy consumes.
 	feed := exchange.NewFeed(cfg.Exchange.Symbols)
 	ticks := make(chan sig.Tick, 1024)
 
+	// Kick off feed streaming in the background; cancel the app if the feed errors.
 	go func() {
 		if err := feed.Run(ctx, ticks); err != nil {
 			log.Error().Err(err).Msg("feed stopped")
@@ -42,6 +48,7 @@ func main() {
 		}
 	}()
 
+	// Instantiate strategy, risk checks, and executor just like production but with paper plumbing.
 	strat := strategy.NewOBIMomentum(cfg.Strategy.Params.OBIThreshold, cfg.Strategy.Params.VolWindowSecs)
 	limits := risk.Limits{MaxNotionalPerTrade: cfg.Risk.MaxNotionalPerTrade}
 	exec := execution.NewExecutor(log)
@@ -53,7 +60,7 @@ func main() {
 			log.Info().Msg("shutting down")
 			return
 		case tk := <-ticks:
-			// Strategy → Signal
+			// Strategy -> Signal
 			sig := strat.OnTick(tk)
 			if sig == nil {
 				continue

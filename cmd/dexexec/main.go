@@ -1,3 +1,4 @@
+// Binary dexexec exercises Solana Jupiter swap flow using the configured wallet.
 package main
 
 import (
@@ -49,6 +50,7 @@ func main() {
 	log.Printf("submitted tx: %s", sig.String())
 }
 
+// getEnv fetches an environment variable and falls back to a default when unset.
 func getEnv(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
