@@ -1,9 +1,8 @@
 package integration
 
 import (
-	"bytes"
 	"context"
-	"strings"
+	"io"
 	"testing"
 	"time"
 
@@ -30,9 +29,7 @@ func TestPaperFlowProducesOrder(t *testing.T) {
 	strat := strategy.NewOBIMomentum(0.05, 5)
 	limits := risk.Limits{MaxNotionalPerTrade: 20}
 
-	var buf bytes.Buffer
-	logger := zerolog.New(&buf)
-	exec := execution.NewExecutor(logger)
+	exec := NewTestExecutor(zerolog.New(io.Discard))
 	account := paper.NewAccount(1000, 1)
 	marks := map[string]float64{}
 
@@ -48,22 +45,32 @@ func TestPaperFlowProducesOrder(t *testing.T) {
 			if !limits.Allow(order.Qty * order.Price) {
 				t.Fatalf("expected notional under limit to pass")
 			}
-			if err := account.MarketFill(order.Symbol, order.Side, order.Qty, order.Price); err != nil {
-				t.Fatalf("MarketFill returned error: %v", err)
-			}
-			if err := exec.Submit(order); err != nil {
+			fills, err := exec.Submit(order)
+			if err != nil {
 				t.Fatalf("Submit returned error: %v", err)
+			}
+			if len(fills) == 0 {
+				t.Fatalf("expected fills to be generated")
+			}
+			for _, fill := range fills {
+				if err := account.MarketFill(order.Symbol, order.Side, fill.Qty, fill.Price); err != nil {
+					t.Fatalf("MarketFill returned error: %v", err)
+				}
 			}
 			snap := account.Snapshot(marks)
 			if snap.Equity <= 0 {
 				t.Fatalf("expected positive equity")
-			}
-			if !strings.Contains(buf.String(), "submit order") {
-				t.Fatalf("expected log output to include submit order, got %s", buf.String())
 			}
 			return
 		case <-ctx.Done():
 			t.Fatalf("timed out waiting for integration flow")
 		}
 	}
+}
+
+// NewTestExecutor creates an executor with deterministic partials for tests.
+func NewTestExecutor(log zerolog.Logger) *execution.Executor {
+	exec := execution.NewExecutor(log)
+	exec.SetConfig(execution.Config{MaxLatencyMs: 1, SlippageBps: 5, PartialFillProbability: 1.0, MaxPartialFills: 2})
+	return exec
 }

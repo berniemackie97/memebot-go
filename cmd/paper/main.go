@@ -51,10 +51,33 @@ func main() {
 
 	// Instantiate strategy, risk checks, executor, mark storage, and paper account state.
 	strat := strategy.NewOBIMomentum(cfg.Strategy.Params.OBIThreshold, cfg.Strategy.Params.VolWindowSecs)
-	limits := risk.Limits{MaxNotionalPerTrade: cfg.Risk.MaxNotionalPerTrade}
+	limits := risk.Limits{
+		MaxNotionalPerTrade: cfg.Risk.MaxNotionalPerTrade,
+		MaxDrawdownPct:      cfg.Risk.KillSwitchDrawdown,
+	}
+
 	exec := execution.NewExecutor(log)
+	exec.SetConfig(execution.Config{
+		MaxLatencyMs:           cfg.Paper.MaxLatencyMs,
+		SlippageBps:            cfg.Paper.SlippageBps,
+		PartialFillProbability: cfg.Paper.PartialFillProbability,
+		MaxPartialFills:        cfg.Paper.MaxPartialFills,
+	})
+
 	account := paper.NewAccount(cfg.Paper.StartingCash, cfg.Paper.MaxPositionPerSymbol)
 	marks := make(map[string]float64, len(cfg.Exchange.Symbols))
+	inMemoryLedger := paper.NewLedger(1024)
+
+	var recorder paper.FillRecorder
+	if path := cfg.Paper.FillsPath; path != "" {
+		rec, err := paper.NewJSONLRecorder(path)
+		if err != nil {
+			log.Warn().Err(err).Msg("paper recorder disabled")
+		} else {
+			recorder = rec
+			defer rec.Close()
+		}
+	}
 
 	log.Info().Msg("paper engine started")
 	for {
@@ -67,6 +90,14 @@ func main() {
 				continue
 			}
 			marks[tk.Symbol] = tk.Price
+
+			// Check drawdown before considering new trades.
+			currentSnap := account.Snapshot(marks)
+			if limits.Breached(account.StartingCash(), currentSnap.Equity) {
+				log.Error().Float64("equity", currentSnap.Equity).Float64("start", account.StartingCash()).Msg("drawdown breached; halting paper engine")
+				metrics.PaperEquity.Set(currentSnap.Equity)
+				return
+			}
 
 			// Strategy -> Signal
 			sig := strat.OnTick(tk)
@@ -113,18 +144,34 @@ func main() {
 			}
 
 			notional := order.Qty * order.Price
-			if !limits.Allow(notional) {
+			if side == execution.Buy && !limits.Allow(notional) {
 				log.Warn().Str("symbol", order.Symbol).Msg("risk rejected order over notional limit")
 				continue
 			}
 
-			if err := account.MarketFill(order.Symbol, order.Side, order.Qty, order.Price); err != nil {
-				log.Warn().Err(err).Str("symbol", order.Symbol).Msg("paper fill rejected")
+			fills, err := exec.Submit(order)
+			if err != nil {
+				log.Error().Err(err).Str("symbol", order.Symbol).Msg("executor submit failed")
 				continue
 			}
 
-			if err := exec.Submit(order); err != nil {
-				log.Error().Err(err).Str("symbol", order.Symbol).Msg("executor submit failed")
+			var totalFilled float64
+			for _, fill := range fills {
+				price := fill.Price
+				if price <= 0 {
+					price = order.Price
+				}
+				if err := account.MarketFill(order.Symbol, order.Side, fill.Qty, price); err != nil {
+					log.Warn().Err(err).Str("symbol", order.Symbol).Msg("paper fill rejected")
+					continue
+				}
+				totalFilled += fill.Qty
+				inMemoryLedger.Record(fill)
+				if recorder != nil {
+					recorder.Record(fill)
+				}
+			}
+			if totalFilled <= 0 {
 				continue
 			}
 
@@ -137,25 +184,23 @@ func main() {
 				metrics.PaperPositions.WithLabelValues(order.Symbol).Set(0)
 			}
 
+			logEvent := log.Info().Str("symbol", order.Symbol).
+				Str("side", string(order.Side)).
+				Float64("qty", totalFilled).
+				Float64("signal_score", sig.Score).
+				Float64("cash", snap.Cash).
+				Float64("equity", snap.Equity).
+				Float64("realized", snap.RealizedPnL)
 			if pos, ok := snap.Positions[order.Symbol]; ok {
-				log.Info().Str("symbol", order.Symbol).
-					Str("side", string(order.Side)).
-					Float64("qty", order.Qty).
-					Float64("cash", snap.Cash).
-					Float64("position", pos.Qty).
-					Float64("avg_cost", pos.AvgCost).
-					Float64("unrealized", pos.Unrealized).
-					Float64("equity", snap.Equity).
-					Float64("realized", snap.RealizedPnL).
-					Msg("paper fill processed")
+				logEvent = logEvent.Float64("position", pos.Qty).Float64("avg_cost", pos.AvgCost).Float64("unrealized", pos.Unrealized)
 			} else {
-				log.Info().Str("symbol", order.Symbol).
-					Str("side", string(order.Side)).
-					Float64("qty", order.Qty).
-					Float64("cash", snap.Cash).
-					Float64("equity", snap.Equity).
-					Float64("realized", snap.RealizedPnL).
-					Msg("paper position closed")
+				logEvent = logEvent.Float64("position", 0).Float64("avg_cost", 0).Float64("unrealized", 0)
+			}
+			logEvent.Msg("paper fills processed")
+
+			if limits.Breached(account.StartingCash(), snap.Equity) {
+				log.Error().Float64("equity", snap.Equity).Float64("start", account.StartingCash()).Msg("drawdown breached after fill; halting")
+				return
 			}
 		}
 	}

@@ -35,3 +35,9 @@ wallet:
 paper:
   starting_cash: 5000
   max_position_per_symbol: 0.5
+  slippage_bps: 3
+  max_latency_ms: 50
+  partial_fill_probability: 0.5
+  max_partial_fills: 2
+  fills_path: "test_fills.jsonl"
+

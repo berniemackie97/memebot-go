@@ -16,13 +16,15 @@ go build ./cmd/dexexec    # compile Solana swap exerciser
 ## Paper Trading Quickstart
 1. Edit `internal/config/config.yaml`:
    - `exchange.name: "binance"` and set `exchange.symbols` to your spot pairs.
-   - Tune `paper` bankroll (`starting_cash`) and per-symbol cap (`max_position_per_symbol`).
+   - Tune bankroll + risk: `paper.starting_cash`, `paper.max_position_per_symbol`, `risk.kill_switch_drawdown`, `risk.max_notional_per_trade`.
+   - Control execution realism: `paper.slippage_bps`, `paper.max_latency_ms`, `paper.partial_fill_probability`, `paper.max_partial_fills`.
+   - Optional: set `paper.fills_path` to persist every simulated fill as JSONL.
    - Pick strategy thresholds under `strategy.params`.
 2. Start metrics + paper loop:
    ```bash
    go run ./cmd/paper
    ```
-3. Watch structured logs for fills and account state. Prometheus metrics are exposed at the configured `app.metrics_addr` (default `:9090`).
+3. Watch structured logs for fills, PnL, equity, slippage, and latency. Prometheus metrics are exposed at the configured `app.metrics_addr` (default `:9090`).
 4. Inspect key gauges/counters:
    - `ticks_total{symbol}` – live trade ingest rate.
    - `orders_total{symbol,side}` – simulated order flow.
@@ -47,14 +49,15 @@ go test ./... -cover  # inspect coverage by package
 - [x] Paper config (starting cash, per-symbol caps) and PnL-aware virtual account ledger
 - [x] Binance live trade feed wired into paper execution loop with retry/resume
 - [x] OBIMomentum strategy combining trade imbalance and momentum to emit live signals
-- [x] Risk notional guard-rail and logging executor stub (with Prometheus counters)
+- [x] Risk notional guard-rail + equity drawdown kill switch
+- [x] Paper execution realism (slippage, latency, partial fills) with JSONL/in-memory trade ledger
 - [x] Prometheus metrics server (`ticks_total`, `orders_total`, `paper_equity`, `paper_position`)
 - [x] Solana/Jupiter DEX client and environment-driven wallet loader
 - [x] Unit + integration tests covering every subsystem, including paper flow
 
 ### Remaining To Hit "Complete"
 1. Replace heuristic strategy logic with production-ready order book imbalance calculations and regression fixtures.
-2. Expand risk to track exposure, PnL, drawdown, and add global kill switches.
+2. Expand risk to track exposure, PnL vectors, and add multi-stage kill switches.
 3. Implement real order routing (REST/WebSocket) in `internal/execution` plus reconciliation.
 4. Build richer paper fills engine (latency, slippage, order states) and persistence for analytics.
 5. Harden DEX path with dynamic route selection, retries, and failure telemetry.
@@ -65,9 +68,9 @@ go test ./... -cover  # inspect coverage by package
 - `app`: process metadata, log level, Prometheus bind address.
 - `exchange`: provider (`binance` today) and target symbols.
 - `strategy`: implementation plus tunable parameters (OBI threshold, volatility window length).
-- `risk`: per-trade notional guard-rails and kill-switch placeholders.
+- `risk`: per-trade notional guard-rails and `kill_switch_drawdown` equity stop.
 - `dex`/`wallet`: Solana RPC + Jupiter endpoints and key material (used by `cmd/dexexec`).
-- `paper`: bankroll (`starting_cash`), per-symbol cap, and (soon) extra paper controls.
+- `paper`: bankroll (`starting_cash`), per-symbol cap, execution realism (`slippage_bps`, `max_latency_ms`, partial fill knobs), and optional fill log (`fills_path`).
 
 ## Documentation
 Full subsystem documentation lives in `docs/architecture.md` with deep dives on binaries, dataflow, and outstanding work.

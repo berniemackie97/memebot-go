@@ -22,15 +22,17 @@ This document captures the complete current shape of the `memebot-go` trading sy
 
 ## Risk Management
 
-`internal/risk.Limits` enforces simple notional caps. The paper engine can cheaply reject orders that exceed policy, and we will enrich this package with drawdown monitoring, kill-switch logic, and position awareness.
+`internal/risk.Limits` enforces notional caps and an equity drawdown kill switch. The paper engine queries these limits before and after fills, aborting the loop once the configured drawdown percentage is breached.
 
 ## Paper Accounting
 
-`internal/paper.Account` maintains simulated cash balances, realised PnL, and per-symbol positions. It enforces starting bankroll, per-symbol caps, and ensures sells only execute against available inventory. Mark-to-market snapshots feed logs and Prometheus gauges so testers can track equity and exposure in real time.
+`internal/paper.Account` maintains simulated cash balances, realised PnL, and per-symbol positions. It enforces starting bankroll, per-symbol caps, and ensures sells only execute against available inventory. Mark-to-market snapshots feed logs, Prometheus gauges, the drawdown checks, and the optional `paper.Ledger`/`paper.JSONLRecorder` for post-run analysis.
+
+`internal/paper.Ledger` keeps an in-memory list of fills, while `internal/paper.JSONLRecorder` appends fills to disk so testers can replay trades.
 
 ## Execution
 
-`internal/execution.Executor` is a logging shim that records every order request and bumps Prometheus counters. The executor will later route to the configured venue (CEX REST/WebSocket APIs or the Solana Jupiter aggregator) while emitting metrics.
+`internal/execution.Executor` is a logging shim that records every order request, applies configurable slippage/latency, optionally breaks fills into partial executions, bumps Prometheus counters, and returns simulated fills. The executor will later route to the configured venue (CEX REST/WebSocket APIs or the Solana Jupiter aggregator) while emitting metrics.
 
 ## Metrics and Observability
 
@@ -62,12 +64,12 @@ The `dexexec` binary demonstrates how to wire the client end-to-end.
 3. The feed streams live Binance ticks (or stub data in tests) onto a buffered channel inside a goroutine.
 4. The strategy consumes ticks synchronously, transforms them into trading signals via imbalance + momentum heuristics, and emits metadata such as reasoning and timestamps.
 5. Risk checks gate the downstream execution path.
-6. The paper account validates bankroll/position limits, mutates balances on fills, and updates realised/unrealised PnL.
-7. Eligible orders are submitted through the executor, which logs intent and increments metrics.
+6. The paper account validates bankroll/position limits, mutates balances on partial fills, updates realised/unrealised PnL, and records fills to the ledger/recorder.
+7. Eligible orders are submitted through the executor, which logs intent, simulates slippage/latency/partials, and increments metrics.
 
 ## Testing Philosophy
 
-Unit tests cover configuration loading, risk limit checks, logger behaviour, feed streaming, paper account transitions, and the Solana client request composition. Strategy tests validate that the OBIMomentum heuristic emits long/short signals when data supports it. Integration tests focus on the paper engine wiring (ensuring ticks flow to strategies and produce orders when thresholds are met).
+Unit tests cover configuration loading, risk limit checks, logger behaviour, feed streaming, paper account transitions, execution fill modelling, and the Solana client request composition. Strategy tests validate that the OBIMomentum heuristic emits long/short signals when data supports it. Integration tests focus on the paper engine wiring (ensuring ticks flow to strategies and produce orders when thresholds are met).
 
 As functionality hardens we will expand these suites with:
 

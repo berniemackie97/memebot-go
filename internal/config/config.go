@@ -27,9 +27,9 @@ type Exchange struct {
 
 // Risk encodes guard-rails for how much size the executor may take on.
 type Risk struct {
-	MaxNotionalPerTrade float64
-	MaxDailyLoss        float64
-	KillSwitchDrawdown  float64
+	MaxNotionalPerTrade float64 `yaml:"max_notional_per_trade"`
+	MaxDailyLoss        float64 `yaml:"max_daily_loss"`
+	KillSwitchDrawdown  float64 `yaml:"kill_switch_drawdown"`
 }
 
 // StrategyParams groups tunable knobs for a strategy implementation.
@@ -45,10 +45,15 @@ type Strategy struct {
 	Params StrategyParams
 }
 
-// Paper captures paper-trading account settings such as starting cash and per-symbol caps.
+// Paper captures paper-trading account settings such as starting cash, per-symbol caps, and execution tuning.
 type Paper struct {
-	StartingCash         float64 `yaml:"starting_cash"`
-	MaxPositionPerSymbol float64 `yaml:"max_position_per_symbol"`
+	StartingCash           float64 `yaml:"starting_cash"`
+	MaxPositionPerSymbol   float64 `yaml:"max_position_per_symbol"`
+	SlippageBps            float64 `yaml:"slippage_bps"`
+	MaxLatencyMs           int     `yaml:"max_latency_ms"`
+	PartialFillProbability float64 `yaml:"partial_fill_probability"`
+	MaxPartialFills        int     `yaml:"max_partial_fills"`
+	FillsPath              string  `yaml:"fills_path"`
 }
 
 // Config collects every configuration leaf for easy marshaling from YAML.

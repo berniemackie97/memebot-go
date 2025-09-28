@@ -1,4 +1,3 @@
-// Package paper contains account bookkeeping utilities for the paper trading engine.
 package paper
 
 import (
@@ -7,6 +6,11 @@ import (
 
 	"memebot-go/internal/execution"
 )
+
+// FillRecorder captures paper fills for later inspection.
+type FillRecorder interface {
+	Record(execution.Fill)
+}
 
 const epsilon = 1e-9
 
@@ -50,6 +54,9 @@ func NewAccount(startingCash, maxPositionPerSymbol float64) *Account {
 		positions:            make(map[string]positionState),
 	}
 }
+
+// StartingCash returns the initial bankroll used to compute drawdown.
+func (a *Account) StartingCash() float64 { return a.startingCash }
 
 // MarketFill attempts to execute a market order at the provided price, mutating balances if successful.
 func (a *Account) MarketFill(symbol string, side execution.Side, qty, price float64) error {
