@@ -18,6 +18,9 @@ type OBIMomentum struct {
 	series    map[string]*tickSeries
 }
 
+// Name returns the identifier for the strategy implementation.
+func (s *OBIMomentum) Name() string { return "OBIMomentum" }
+
 type tickSeries struct {
 	ticks []signal.Tick
 }

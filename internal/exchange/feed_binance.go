@@ -28,12 +28,13 @@ type binanceTrade struct {
 }
 
 func (f *Feed) runBinance(ctx context.Context, out chan<- signal.Tick) error {
-	if len(f.Symbols) == 0 {
+	symbols := f.snapshotSymbols()
+	if len(symbols) == 0 {
 		return fmt.Errorf("binance feed requires at least one symbol")
 	}
 
-	streams := make([]string, len(f.Symbols))
-	for i, sym := range f.Symbols {
+	streams := make([]string, len(symbols))
+	for i, sym := range symbols {
 		streams[i] = strings.ToLower(sym) + "@trade"
 	}
 
@@ -70,7 +71,8 @@ func (f *Feed) consumeBinanceStream(ctx context.Context, url string, out chan<- 
 	}
 	defer conn.Close()
 
-	f.log.Info().Str("provider", ProviderBinance).Strs("symbols", f.Symbols).Msg("connected market data feed")
+	symbols := f.snapshotSymbols()
+	f.log.Info().Str("provider", ProviderBinance).Strs("symbols", symbols).Msg("connected market data feed")
 
 	conn.SetReadLimit(1 << 20)
 	conn.SetReadDeadline(time.Now().Add(30 * time.Second))

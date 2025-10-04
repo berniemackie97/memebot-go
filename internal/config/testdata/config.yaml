@@ -10,11 +10,25 @@ exchange:
   api_key: "k"
   api_secret: "s"
   testnet: true
+  dexscreener:
+    base_url: "https://api.dexscreener.com"
+    default_chain: "solana"
+    poll_interval_ms: 750
+  discovery:
+    enabled: true
+    keywords: ["pepe"]
+    chains: ["solana"]
+    max_pairs: 5
+    refresh_interval_ms: 20000
+    min_liquidity_usd: 1000
+    min_volume_usd: 500
+    max_pairs_per_keyword: 3
 
 risk:
   max_notional_per_trade: 10
   max_daily_loss: 50
   kill_switch_drawdown: 0.1
+  max_portfolio_notional: 100
 
 strategy:
   mode: "obi_momentum"
@@ -22,6 +36,9 @@ strategy:
     obi_levels: 3
     obi_threshold: 1.2
     vol_window_secs: 60
+    trend_threshold: 0.05
+    trend_window_secs: 90
+    trend_min_volume_usd: 1000
 
 dex:
   chain: "solana"
@@ -35,6 +52,7 @@ wallet:
 paper:
   starting_cash: 5000
   max_position_per_symbol: 0.5
+  max_position_notional_usd: 200
   slippage_bps: 3
   max_latency_ms: 50
   partial_fill_probability: 0.5

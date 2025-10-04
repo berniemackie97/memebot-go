@@ -2,6 +2,7 @@ package paper
 
 import (
 	"errors"
+	"math"
 	"sync"
 
 	"memebot-go/internal/execution"
@@ -26,6 +27,7 @@ type Account struct {
 	cash                 float64
 	realizedPnL          float64
 	maxPositionPerSymbol float64
+	maxNotionalPerSymbol float64
 	positions            map[string]positionState
 }
 
@@ -46,11 +48,12 @@ type Snapshot struct {
 }
 
 // NewAccount constructs an account populated with starting cash and optional position cap.
-func NewAccount(startingCash, maxPositionPerSymbol float64) *Account {
+func NewAccount(startingCash, maxPositionPerSymbol, maxNotionalPerSymbol float64) *Account {
 	return &Account{
 		startingCash:         startingCash,
 		cash:                 startingCash,
 		maxPositionPerSymbol: maxPositionPerSymbol,
+		maxNotionalPerSymbol: maxNotionalPerSymbol,
 		positions:            make(map[string]positionState),
 	}
 }
@@ -81,6 +84,12 @@ func (a *Account) MarketFill(symbol string, side execution.Side, qty, price floa
 		newQty := state.Qty + qty
 		if a.maxPositionPerSymbol > 0 && newQty > a.maxPositionPerSymbol+epsilon {
 			return errors.New("position limit exceeded")
+		}
+		if a.maxNotionalPerSymbol > 0 {
+			newNotional := newQty * price
+			if newNotional > a.maxNotionalPerSymbol+epsilon {
+				return errors.New("position notional limit exceeded")
+			}
 		}
 		newAvg := price
 		if newQty > 0 {
@@ -160,4 +169,30 @@ func (a *Account) RealizedPnL() float64 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.realizedPnL
+}
+
+// MaxAdditionalLong reports how much additional long size can be added without breaching per-symbol caps.
+func (a *Account) MaxAdditionalLong(symbol string, price float64) float64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	capacity := math.Inf(1)
+	state := a.positions[symbol]
+	if a.maxPositionPerSymbol > 0 {
+		remaining := a.maxPositionPerSymbol - state.Qty
+		if remaining <= 0 {
+			return 0
+		}
+		capacity = remaining
+	}
+	if a.maxNotionalPerSymbol > 0 && price > 0 {
+		remainingUsd := a.maxNotionalPerSymbol - state.Qty*price
+		if remainingUsd <= 0 {
+			return 0
+		}
+		qtyCap := remainingUsd / price
+		if qtyCap < capacity {
+			capacity = qtyCap
+		}
+	}
+	return capacity
 }

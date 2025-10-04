@@ -8,7 +8,7 @@ import (
 )
 
 func TestMarketFillBuySellPnL(t *testing.T) {
-	account := NewAccount(1000, 1)
+	account := NewAccount(1000, 1, 1000)
 
 	if err := account.MarketFill("BTCUSDT", execution.Buy, 0.5, 1000); err != nil {
 		t.Fatalf("unexpected buy error: %v", err)
@@ -44,22 +44,50 @@ func TestMarketFillBuySellPnL(t *testing.T) {
 }
 
 func TestMarketFillInsufficientCash(t *testing.T) {
-	account := NewAccount(10, 1)
+	account := NewAccount(10, 1, 100)
 	if err := account.MarketFill("BTCUSDT", execution.Buy, 0.1, 200); err == nil {
 		t.Fatalf("expected cash error")
 	}
 }
 
 func TestMarketFillPositionLimit(t *testing.T) {
-	account := NewAccount(1000, 0.1)
+	account := NewAccount(1000, 0.1, 1000)
 	if err := account.MarketFill("BTCUSDT", execution.Buy, 0.2, 1000); err == nil {
 		t.Fatalf("expected position limit error")
 	}
 }
 
 func TestMarketFillInsufficientPosition(t *testing.T) {
-	account := NewAccount(1000, 1)
+	account := NewAccount(1000, 1, 1000)
 	if err := account.MarketFill("BTCUSDT", execution.Sell, 0.01, 1000); err == nil {
 		t.Fatalf("expected insufficient position error")
+	}
+}
+
+func TestPositionNotionalLimit(t *testing.T) {
+	account := NewAccount(1000, 0, 100)
+	if err := account.MarketFill("BTCUSDT", execution.Buy, 1, 200); err == nil {
+		t.Fatalf("expected notional limit error")
+	}
+}
+
+func TestMaxAdditionalLong(t *testing.T) {
+	account := NewAccount(1000, 3, 300)
+	if got := account.MaxAdditionalLong("BTCUSDT", 100); math.Abs(got-3) > 1e-9 {
+		t.Fatalf("expected capacity 3 got %.4f", got)
+	}
+	if err := account.MarketFill("BTCUSDT", execution.Buy, 1, 100); err != nil {
+		t.Fatalf("unexpected buy error: %v", err)
+	}
+	if got := account.MaxAdditionalLong("BTCUSDT", 100); math.Abs(got-2) > 1e-9 {
+		t.Fatalf("expected capacity 2 got %.4f", got)
+	}
+	account = NewAccount(1000, 0, 0)
+	if cap := account.MaxAdditionalLong("ANY", 10); !math.IsInf(cap, 1) {
+		t.Fatalf("expected infinite capacity when limit disabled")
+	}
+	account = NewAccount(1000, 0, 50)
+	if cap := account.MaxAdditionalLong("ANY", 10); math.Abs(cap-5) > 1e-9 {
+		t.Fatalf("expected notional capacity 5 got %.4f", cap)
 	}
 }

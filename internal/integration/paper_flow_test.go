@@ -30,7 +30,7 @@ func TestPaperFlowProducesOrder(t *testing.T) {
 	limits := risk.Limits{MaxNotionalPerTrade: 20}
 
 	exec := NewTestExecutor(zerolog.New(io.Discard))
-	account := paper.NewAccount(1000, 1)
+	account := paper.NewAccount(1000, 1, 100)
 	marks := map[string]float64{}
 
 	for {

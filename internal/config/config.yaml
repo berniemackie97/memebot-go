@@ -5,16 +5,32 @@ app:
   log_level: "info"
 
 exchange:
-  name: "binance" # provider for realtime market data feed
-  symbols: ["BTCUSDT", "ETHUSDT"]
+  name: "dexscreener" # HTTP-polling feed for on-chain meme pairs
+  symbols:
+    - "WIFSOL@solana/32vFAmd12dTHMwo9g5QuCE9sgvdv72yUfK9PMP2dtBj7"   # Dogwifhat/SOL on Raydium
+    - "BODENSOL@solana/6UYbX1x8YUcFj8YstPYiZByG7uQzAq2s46ZWphUMkjg5" # Jeo Boden/SOL on Raydium
+  dexscreener:
+    base_url: "https://api.dexscreener.com"
+    default_chain: "solana"
+    poll_interval_ms: 2000
+  discovery:
+    enabled: true
+    keywords: ["wif", "boden", "pepe"]
+    chains: ["solana"]
+    max_pairs: 25
+    refresh_interval_ms: 15000
+    min_liquidity_usd: 5000
+    min_volume_usd: 8000
+    max_pairs_per_keyword: 8
   api_key: ""
   api_secret: ""
   testnet: true
 
 risk:
   max_notional_per_trade: 50.0
-  max_daily_loss: 200.0
-  kill_switch_drawdown: 0.08
+  max_daily_loss: 75.0
+  kill_switch_drawdown: 0.12
+  max_portfolio_notional: 400.0
 
 strategy:
   mode: "obi_momentum" # order book imbalance + momentum
@@ -22,6 +38,9 @@ strategy:
     obi_levels: 5
     obi_threshold: 1.4
     vol_window_secs: 120
+    trend_threshold: 0.08
+    trend_window_secs: 180
+    trend_min_volume_usd: 2500
 
 dex:
   chain: "solana"
@@ -33,8 +52,9 @@ wallet:
   private_key_base58: "" # kept empty; we load from .env at runtime
 
 paper:
-  starting_cash: 10000
-  max_position_per_symbol: 1.0
+  starting_cash: 2000
+  max_position_per_symbol: 0
+  max_position_notional_usd: 100
   slippage_bps: 5
   max_latency_ms: 150
   partial_fill_probability: 0.4

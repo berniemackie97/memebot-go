@@ -57,3 +57,21 @@ func TestOnTickBelowThreshold(t *testing.T) {
 		t.Fatalf("expected nil signal when below threshold")
 	}
 }
+
+func TestBuildReturnsStrategy(t *testing.T) {
+	params := Params{OBIThreshold: 0.3, VolWindowSecs: 60}
+	strat := Build("obi_momentum", params)
+	if strat == nil {
+		t.Fatalf("expected strategy instance")
+	}
+	if strat.Name() == "" {
+		t.Fatalf("expected strategy name")
+	}
+	trend := Build("trend_follow", Params{TrendThreshold: 0.05, TrendWindowSecs: 120, TrendMinVolumeUSD: 100})
+	if trend == nil {
+		t.Fatalf("expected trend strategy instance")
+	}
+	if trend.Name() != "TrendFollower" {
+		t.Fatalf("unexpected trend strategy name: %s", trend.Name())
+	}
+}

@@ -14,21 +14,19 @@ This document captures the complete current shape of the `memebot-go` trading sy
 
 ## Data Ingestion Layer
 
-`internal/exchange` now supports multiple providers. In development/tests we can fall back to the synthetic stub, while production paper runs consume Binance aggregated trades via public websockets with retry/ping handling. The feed pushes `signal.Tick` messages into buffered channels consumed by strategies and also increments Prometheus tick counters.
+`internal/exchange` now supports multiple providers. In development/tests we can fall back to the synthetic stub, while production paper runs can consume Binance aggregated trades via public websockets with retry/ping handling or poll Dexscreener for Solana meme coin pairs using configurable HTTP intervals. A companion discovery loop continuously calls Dexscreener search endpoints (keyword + liquidity/volume filters), scores results by liquidity/volume/price change, and updates the feed with newly surfaced meme pairs so that strategies automatically expand their universe without manual intervention. The feed pushes `signal.Tick` messages into buffered channels consumed by strategies and also increments Prometheus tick counters.
 
 ## Signal Generation
 
-`internal/strategy.OBIMomentum` maintains per-symbol rolling windows of trade data. It computes a simple order-flow imbalance (buy volume vs sell volume) and combines it with price momentum (tanh-normalised change over the window). Weighted scores exceeding the configured threshold emit `signal.Signal` objects for downstream consumers.
+`internal/strategy.OBIMomentum` maintains per-symbol rolling windows of trade data. It computes a simple order-flow imbalance (buy volume vs sell volume) and combines it with price momentum (tanh-normalised change over the window). Weighted scores exceeding the configured threshold emit `signal.Signal` objects for downstream consumers. A lightweight `strategy.Build` factory selects the configured engine (OBI or the new TrendFollower momentum strategy that requires both windowed percent change and USD volume) so operators can toggle playbooks from configuration.
 
 ## Risk Management
 
-`internal/risk.Limits` enforces notional caps and an equity drawdown kill switch. The paper engine queries these limits before and after fills, aborting the loop once the configured drawdown percentage is breached.
+`internal/risk` now supplies notional guards plus dual drawdown controls (equity-based and intratrade relative to the latest peak) alongside a daily realised-loss kill switch. Helper functions compute gross/net exposure and aggregate unrealised PnL so operators can monitor risk in real time.
 
 ## Paper Accounting
 
-`internal/paper.Account` maintains simulated cash balances, realised PnL, and per-symbol positions. It enforces starting bankroll, per-symbol caps, and ensures sells only execute against available inventory. Mark-to-market snapshots feed logs, Prometheus gauges, the drawdown checks, and the optional `paper.Ledger`/`paper.JSONLRecorder` for post-run analysis.
-
-`internal/paper.Ledger` keeps an in-memory list of fills, while `internal/paper.JSONLRecorder` appends fills to disk so testers can replay trades.
+`internal/paper.Account` maintains simulated cash balances, realised PnL, and per-symbol positions. It enforces starting bankroll, per-symbol quantity caps, optional per-symbol USD notional caps, and ensures sells only execute against available inventory. Mark-to-market snapshots feed logs, Prometheus gauges, risk checks, and the optional `paper.Ledger`/`paper.JSONLRecorder` for post-run analysis.
 
 ## Execution
 
@@ -42,7 +40,7 @@ This document captures the complete current shape of the `memebot-go` trading sy
 - `paper_equity`: paper account equity (cash + positions).
 - `paper_position{symbol}`: open size per symbol.
 
-`metrics.Serve` exposes `/metrics` so dashboards can scrape the bot while it runs.
+`metrics.Serve` exposes `/metrics` so dashboards can scrape the bot while it runs. Additionally, the paper daemon exposes an HTTP API on `:8081` providing `/paper/fills` and `/paper/account` for testers.
 
 ## Utilities
 
